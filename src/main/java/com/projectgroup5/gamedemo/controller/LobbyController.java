@@ -1,0 +1,171 @@
+package com.projectgroup5.gamedemo.controller;
+
+import com.projectgroup5.gamedemo.CreateRoomRequest;
+import com.projectgroup5.gamedemo.LobbySlotDto;
+import com.projectgroup5.gamedemo.dto.RoomDto;
+import com.projectgroup5.gamedemo.entity.User;
+import com.projectgroup5.gamedemo.game.GameRoomManager;
+import com.projectgroup5.gamedemo.service.AuthService;
+import com.projectgroup5.gamedemo.service.LobbyService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/lobby")
+@CrossOrigin(origins = "*")
+public class LobbyController {
+
+    private final LobbyService lobbyService;
+    private final AuthService authService;
+    private final GameRoomManager gameRoomManager;
+
+    public LobbyController(LobbyService lobbyService, 
+                          AuthService authService,
+                          GameRoomManager gameRoomManager) {
+        this.lobbyService = lobbyService;
+        this.authService = authService;
+        this.gameRoomManager = gameRoomManager;
+    }
+
+    // 大厅 20 个桌子状态
+    @GetMapping
+    public ResponseEntity<List<LobbySlotDto>> getLobby() {
+        return ResponseEntity.ok(lobbyService.getLobbySnapshot());
+    }
+
+    // 创建房间
+    @PostMapping("/rooms")
+    public ResponseEntity<?> createRoom(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @RequestBody CreateRoomRequest request) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String ownerName = userOpt.get().getUsername();
+        RoomDto room = lobbyService.createRoom(request, ownerName);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot create room, maybe no free table or you are already in a room.");
+        }
+        return ResponseEntity.ok(room);
+    }
+
+    // 加入房间
+    @PostMapping("/rooms/{roomId}/join")
+    public ResponseEntity<?> joinRoom(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @PathVariable long roomId) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String username = userOpt.get().getUsername();
+        RoomDto room = lobbyService.joinRoom(roomId, username);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot join room (maybe full, started or you are in another room).");
+        }
+        return ResponseEntity.ok(room);
+    }
+
+    // 离开房间
+    @PostMapping("/rooms/{roomId}/leave")
+    public ResponseEntity<?> leaveRoom(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @PathVariable long roomId) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String username = userOpt.get().getUsername();
+        lobbyService.leaveRoom(roomId, username);
+        return ResponseEntity.ok().build();
+    }
+
+    // 切换准备状态
+    @PostMapping("/rooms/{roomId}/toggle-ready")
+    public ResponseEntity<?> toggleReady(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @PathVariable long roomId) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String username = userOpt.get().getUsername();
+        RoomDto room = lobbyService.toggleReady(roomId, username);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot toggle ready.");
+        }
+        return ResponseEntity.ok(room);
+    }
+
+    // 房主点击开始 - Architecture A（服务器权威）
+    @PostMapping("/rooms/{roomId}/start-architecture-a")
+    public ResponseEntity<?> startGameArchitectureA(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @PathVariable long roomId) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String username = userOpt.get().getUsername();
+        RoomDto room = lobbyService.startGame(roomId, username);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot start game (not owner or someone not ready).");
+        }
+        
+        // ★ 创建游戏世界（Architecture A）
+        gameRoomManager.createGameRoom(room);
+        
+        return ResponseEntity.ok(room);
+    }
+    
+    // 房主点击开始 - Architecture B（P2P Lockstep）- 未来实现
+    @PostMapping("/rooms/{roomId}/start-architecture-b")
+    public ResponseEntity<?> startGameArchitectureB(
+            @RequestHeader(name = "Authorization", required = false) String authHeader,
+            @PathVariable long roomId) {
+
+        Optional<User> userOpt = getUserByAuth(authHeader);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or missing token");
+        }
+
+        String username = userOpt.get().getUsername();
+        RoomDto room = lobbyService.startGame(roomId, username);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Cannot start game (not owner or someone not ready).");
+        }
+        
+        // TODO: 实现Architecture B (P2P)
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+                .body("Architecture B (P2P) not yet implemented");
+    }
+
+    // 工具函数
+    private Optional<User> getUserByAuth(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return Optional.empty();
+        }
+        String token = authHeader.substring("Bearer ".length()).trim();
+        return authService.getUserByToken(token);
+    }
+}
