@@ -145,6 +145,8 @@ function applyLobbySlots(slots) {
 
     let shouldEnterGame = false;
     let enterRoomId = null;
+    let enterArchitecture = 'A'; // 🔥 记录架构模式
+    let enterWinMode = 'SCORE_50'; // 🔥 记录胜利条件
 
     for (const slot of slots) {
         const idx = slot.index;
@@ -165,12 +167,15 @@ function applyLobbySlots(slots) {
         const isOwner = currentPlayer ? !!currentPlayer.owner : false;
         const isReady = currentPlayer ? !!currentPlayer.ready : false;
 
-        // 记录当前房间 ID，用于控制“只能加入一个房间”
+        // 记录当前房间 ID，用于控制"只能加入一个房间"
         if (isInRoom) {
             currentRoomId = room.roomId;
             if (room.started) {
                 shouldEnterGame = true;
                 enterRoomId = room.roomId;
+                // 🔥 记录架构模式和胜利条件
+                enterArchitecture = room.architecture || 'A';
+                enterWinMode = room.winMode || 'SCORE_50';
             }
         }
 
@@ -294,8 +299,8 @@ function applyLobbySlots(slots) {
 
     // 🔥 只在允许自动跳转时才执行（防止从游戏错误返回后无限循环）
     if (shouldEnterGame && enterRoomId !== null && allowAutoEnterGame) {
-        console.log('[LOBBY] 自动进入游戏 roomId:', enterRoomId);
-        enterGame(enterRoomId);
+        console.log('[LOBBY] 自动进入游戏 roomId:', enterRoomId, 'arch:', enterArchitecture, 'winMode:', enterWinMode);
+        enterGame(enterRoomId, enterWinMode, enterArchitecture);
     }
 }
 

@@ -133,7 +133,8 @@ public class LobbyController {
         }
 
         String username = userOpt.get().getUsername();
-        RoomDto room = lobbyService.startGame(roomId, username);
+        // 🔥 指定Architecture A模式
+        RoomDto room = lobbyService.startGame(roomId, username, GameMode.ARCH_A);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Cannot start game (not owner or someone not ready).");
@@ -157,14 +158,15 @@ public class LobbyController {
         }
 
         String username = userOpt.get().getUsername();
-        RoomDto room = lobbyService.startGame(roomId, username);
+        // 🔥 指定Architecture B模式
+        RoomDto room = lobbyService.startGame(roomId, username, GameMode.ARCH_B);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Cannot start game (not owner or someone not ready).");
         }
         
-        // ★ Architecture B (P2P Lockstep)
-        // 游戏逻辑在Host客户端运行，服务器只负责中转消息
+        // ★ Architecture B (P2P Gossip)
+        // 游戏逻辑在每个客户端运行，服务器只负责中转消息
         // GameWebSocketHandlerB 会处理所有P2P通信
         logger.info("Starting game (Architecture B) for room {}, owner: {}", roomId, username);
         

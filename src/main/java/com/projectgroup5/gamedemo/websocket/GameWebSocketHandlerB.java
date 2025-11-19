@@ -15,15 +15,19 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Architecture B: P2P Lockstep via Server Relay
+ * Architecture B: P2P Gossip via Server Relay
  *
- * - 不做物理计算，只负责：
+ * 完全去中心化的P2P架构：
  *   1) 认证 / 房间校验
  *   2) 管理 WebSocket 连接
- *   3) 维护每个房间的 host（房主）/ peers
- *   4) 转发 LOCKSTEP_INPUT / GAME_STATE / HOST_CHANGED 等消息
+ *   3) 转发所有消息给房间其他玩家
+ *   4) 打印所有消息到控制台（日志）
  *
- * 真正的游戏模拟在 Host 浏览器里运行。
+ * 每个用户平等：
+ *   - 每个用户生成自己的石头（username_asteroidId）
+ *   - 每个用户本地计算碰撞
+ *   - 每个用户广播自己的状态
+ *   - 服务器只做消息中转，不做任何游戏逻辑
  */
 @Component
 public class GameWebSocketHandlerB extends TextWebSocketHandler {
@@ -43,8 +47,11 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
     // roomId -> Set<sessionId>
     private final Map<Long, Set<String>> roomSessions = new ConcurrentHashMap<>();
 
-    // roomId -> hostSessionId  (Architecture B: 哪个 peer 当前是 Host)
-    private final Map<Long, String> roomHosts = new ConcurrentHashMap<>();
+    // 🔥 游戏结束投票：roomId -> Map<username, VoteInfo>
+    private final Map<Long, Map<String, GameEndVote>> gameEndVotes = new ConcurrentHashMap<>();
+
+    // 🔥 房间游戏开始时间：roomId -> startTime
+    private final Map<Long, Long> roomStartTimes = new ConcurrentHashMap<>();
 
     public GameWebSocketHandlerB(AuthService authService,
                                  LobbyService lobbyService,
@@ -84,20 +91,29 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
                     handleJoinGame(session, msg);
                     break;
 
-                case "LOCKSTEP_INPUT":
-                    handleLockstepInput(session, msg);
-                    break;
-
-                case "GAME_STATE":
-                    handleGameStateFromHost(session, msg);
-                    break;
-
                 case "LEAVE_GAME":
                     handleLeaveGame(session);
                     break;
 
+                case "GAME_END_VOTE":
+                    handleGameEndVote(session, msg);
+                    break;
+
+                // 🔥 P2P Gossip：所有游戏消息都直接转发+打印日志
+                case "PLAYER_POSITION":
+                case "ASTEROID_SPAWN":
+                case "ASTEROID_POSITION":
+                case "BULLET_FIRED":
+                case "BULLET_POSITION":
+                case "BULLET_HIT_ASTEROID":
+                case "PLAYER_HIT":
+                case "PLAYER_DEAD":
+                case "SCORE_UPDATE":
+                    handleGossipMessage(session, msg, type);
+                    break;
+
                 default:
-                    logger.warn("[ArchB] Unknown message type: {}", type);
+                    logger.warn("[ArchB-Gossip] Unknown message type: {}", type);
             }
 
         } catch (Exception e) {
@@ -115,11 +131,8 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
     // --- 业务处理 ---
 
     /**
-     * JOIN_GAME_B:
-     * {
-     *   type: "JOIN_GAME_B",
-     *   roomId, username, token
-     * }
+     * JOIN_GAME_B: 玩家加入游戏
+     * P2P Gossip 模式：无Host概念，所有玩家平等
      */
     private void handleJoinGame(WebSocketSession session, Map<String, Object> msg) throws IOException {
         String username = (String) msg.get("username");
@@ -139,11 +152,11 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
             return;
         }
 
-        // 2. 检查玩家是否在房间 (LobbyService / GameRoomManager 已维护)
+        // 2. 检查玩家是否在房间
         if (!lobbyService.isPlayerInRoom(roomId, username)) {
             sendJson(session, Map.of(
                     "type", "NOT_IN_ROOM",
-                    "message", "Not in room (Arch B)"
+                    "message", "Not in room (Arch B - Gossip)"
             ));
             session.close();
             return;
@@ -154,119 +167,259 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
         roomSessions.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet())
                 .add(sessionId);
 
-        // 4. 如果房间没有 host，则当前玩家成为 host
-        roomHosts.computeIfAbsent(roomId, rid -> {
-            logger.info("[ArchB] Room {} host set to {}", rid, username);
-            return sessionId;
-        });
+        // 🔥 记录游戏开始时间（第一个玩家加入时）
+        roomStartTimes.putIfAbsent(roomId, System.currentTimeMillis());
 
-        boolean isHost = roomHosts.get(roomId).equals(sessionId);
+        logger.info("[ArchB-Gossip] Player {} joined room {} (peer-to-peer)", username, roomId);
 
-        logger.info("[ArchB] Player {} joined room {} (sessionId={}, isHost={})",
-                username, roomId, sessionId, isHost);
-
-        // 5. 告诉这个客户端它是否是 host
+        // 4. 告诉客户端加入成功（所有玩家平等，无Host）
         sendJson(session, Map.of(
                 "type", "JOINED_B",
                 "roomId", roomId,
                 "username", username,
-                "isHost", isHost,
-                "architecture", "B"
-        ));
-
-        // 6. 通知房间其它玩家：新玩家进入 & host是谁
-        broadcastToRoom(roomId, Map.of(
-                "type", "ROOM_STATE_B",
-                "roomId", roomId,
-                "hostUsername", getHostUsername(roomId),
+                "architecture", "B-Gossip",
                 "players", getRoomPlayerUsernames(roomId)
         ));
+
+        // 5. 通知房间其他玩家：新玩家进入
+        Map<String, Object> joinEvent = new HashMap<>();
+        joinEvent.put("type", "PLAYER_JOINED");
+        joinEvent.put("username", username);
+        joinEvent.put("players", getRoomPlayerUsernames(roomId));
+        broadcastToRoomExcept(roomId, joinEvent, sessionId);
     }
 
     /**
-     * LOCKSTEP_INPUT:
-     * 普通玩家 / host 都可以发输入。
-     * 服务器只负责转发给房间内其他 peer，特别是 Host。
+     * 🔥 P2P Gossip消息处理：接收、打印日志、转发
+     * 
+     * 消息类型：
+     * - PLAYER_POSITION: 玩家位置
+     * - ASTEROID_SPAWN: 石头生成
+     * - ASTEROID_POSITION: 石头位置
+     * - BULLET_FIRED: 子弹发射
+     * - BULLET_POSITION: 子弹位置
+     * - BULLET_HIT_ASTEROID: 子弹命中石头
+     * - PLAYER_HIT: 玩家被撞
+     * - PLAYER_DEAD: 玩家死亡
+     * - SCORE_UPDATE: 分数更新
      */
-    private void handleLockstepInput(WebSocketSession session, Map<String, Object> msg) {
+    private void handleGossipMessage(WebSocketSession session, Map<String, Object> msg, String type) {
         PlayerConnection conn = connections.get(session.getId());
         if (conn == null) return;
 
-        Long roomId = conn.roomId;
+        String username = conn.username;
+        long roomId = conn.roomId;
 
-        Map<String, Object> forward = new HashMap<>(msg);
-        forward.put("from", conn.username);  // 标记是谁发的
+        // 🔥 打印详细日志到控制台
+        logGossipMessage(type, username, msg);
 
-        // 转发给房间所有人（含 host，含自己也可以，前端自己忽略）
-        broadcastToRoom(roomId, forward);
+        // 转发给房间其他玩家（不包括发送者自己）
+        broadcastToRoomExcept(roomId, msg, session.getId());
     }
 
     /**
-     * GAME_STATE:
-     * 只有当前房间的 host 可以发 GAME_STATE，服务器负责转发给其他 peer。
-     * （相当于 host 做服务器那一套 GameWorld + Physics）
+     * 打印P2P Gossip消息到控制台
      */
-    private void handleGameStateFromHost(WebSocketSession session, Map<String, Object> msg) {
-        PlayerConnection conn = connections.get(session.getId());
-        if (conn == null) return;
+    private void logGossipMessage(String type, String username, Map<String, Object> msg) {
+        switch (type) {
+            case "PLAYER_POSITION":
+                logger.info("[ArchB-Gossip] [{}] PLAYER_POSITION: x={}, y={}",
+                        username, msg.get("x"), msg.get("y"));
+                break;
 
-        Long roomId = conn.roomId;
-        String hostSessionId = roomHosts.get(roomId);
+            case "ASTEROID_SPAWN":
+                logger.info("[ArchB-Gossip] [{}] ASTEROID_SPAWN: id={} at ({}, {}), radius={}, hp={}",
+                        username, msg.get("asteroidId"), msg.get("x"), msg.get("y"),
+                        msg.get("radius"), msg.get("hp"));
+                break;
 
-        // 必须是 host 才能发送 GAME_STATE
-        if (!session.getId().equals(hostSessionId)) {
-            logger.warn("[ArchB] Non-host {} tried to send GAME_STATE for room {}", conn.username, roomId);
-            return;
+            case "ASTEROID_POSITION":
+                logger.info("[ArchB-Gossip] [{}] ASTEROID_POSITION: id={} at ({}, {})",
+                        username, msg.get("asteroidId"), msg.get("x"), msg.get("y"));
+                break;
+
+            case "BULLET_FIRED":
+                logger.info("[ArchB-Gossip] [{}] BULLET_FIRED: id={} at ({}, {})",
+                        username, msg.get("bulletId"), msg.get("x"), msg.get("y"));
+                break;
+
+            case "BULLET_POSITION":
+                logger.info("[ArchB-Gossip] [{}] BULLET_POSITION: id={} at ({}, {})",
+                        username, msg.get("bulletId"), msg.get("x"), msg.get("y"));
+                break;
+
+            case "BULLET_HIT_ASTEROID":
+                logger.info("[ArchB-Gossip] [{}] BULLET_HIT_ASTEROID: bullet={} hit asteroid={} (owner={})",
+                        username, msg.get("bulletId"), msg.get("asteroidId"), msg.get("asteroidOwner"));
+                break;
+
+            case "PLAYER_HIT":
+                logger.info("[ArchB-Gossip] [{}] PLAYER_HIT: by asteroid={}, hp={}",
+                        username, msg.get("asteroidId"), msg.get("hp"));
+                break;
+
+            case "PLAYER_DEAD":
+                logger.info("[ArchB-Gossip] [{}] PLAYER_DEAD", username);
+                break;
+
+            case "SCORE_UPDATE":
+                logger.info("[ArchB-Gossip] [{}] SCORE_UPDATE: score={}, reason={}",
+                        username, msg.get("score"), msg.get("reason"));
+                break;
+
+            case "ASTEROID_DESTROYED":
+                logger.info("[ArchB-Gossip] [{}] ASTEROID_DESTROYED: id={}, reason={}",
+                        username, msg.get("asteroidId"), msg.get("reason"));
+                break;
+
+            case "BULLET_DESTROYED":
+                logger.info("[ArchB-Gossip] [{}] BULLET_DESTROYED: id={}, reason={}",
+                        username, msg.get("bulletId"), msg.get("reason"));
+                break;
+
+            default:
+                logger.info("[ArchB-Gossip] [{}] {}: {}", username, type, msg);
         }
-
-        // 给整个房间广播（包括 host 自己）
-        broadcastToRoom(roomId, msg);
     }
 
     private void handleLeaveGame(WebSocketSession session) {
         cleanupConnection(session.getId());
     }
 
+    /**
+     * 🔥 处理游戏结束投票
+     */
+    private void handleGameEndVote(WebSocketSession session, Map<String, Object> msg) {
+        PlayerConnection conn = connections.get(session.getId());
+        if (conn == null) return;
+
+        String username = conn.username;
+        long roomId = conn.roomId;
+        String reason = (String) msg.get("reason");
+        Object timestampObj = msg.get("timestamp");
+        long timestamp = timestampObj instanceof Number ? 
+            ((Number) timestampObj).longValue() : System.currentTimeMillis();
+
+        logger.info("[ArchB-Gossip] [{}] GAME_END_VOTE: reason={}, timestamp={}", 
+                username, reason, timestamp);
+
+        // 记录投票
+        gameEndVotes.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>())
+                .put(username, new GameEndVote(username, reason, timestamp));
+
+        // 检查是否所有玩家都投票了
+        checkAndFinalizeGameEnd(roomId);
+    }
+
+    /**
+     * 检查是否所有玩家都投票，如果是则结束游戏
+     */
+    private void checkAndFinalizeGameEnd(long roomId) {
+        List<String> allPlayers = getRoomPlayerUsernames(roomId);
+        Map<String, GameEndVote> votes = gameEndVotes.get(roomId);
+        
+        if (votes == null || allPlayers.isEmpty()) return;
+
+        // 检查是否所有玩家都投票
+        boolean allVoted = allPlayers.stream().allMatch(votes::containsKey);
+        
+        if (allVoted) {
+            logger.info("[ArchB-Gossip] Room {} all players voted, ending game", roomId);
+            
+            // 统计投票结果
+            Map<String, Long> reasonCounts = new HashMap<>();
+            for (GameEndVote vote : votes.values()) {
+                reasonCounts.merge(vote.reason, 1L, Long::sum);
+            }
+            
+            // 找到最多票的原因
+            String finalReason = reasonCounts.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse("UNKNOWN");
+            
+            logger.info("[ArchB-Gossip] Room {} game end reason: {}, votes: {}", 
+                    roomId, finalReason, reasonCounts);
+
+            // 保存游戏记录到数据库
+            saveGameLog(roomId, votes, finalReason);
+
+            // 🔥 重置房间状态（让玩家可以重新开始）
+            lobbyService.resetRoomAfterGame(roomId);
+
+            // 通知所有玩家游戏结束
+            Map<String, Object> endMsg = new HashMap<>();
+            endMsg.put("type", "GAME_ENDED");
+            endMsg.put("reason", finalReason);
+            endMsg.put("votes", votes);
+            broadcastToRoom(roomId, endMsg);
+
+            // 清理投票记录
+            gameEndVotes.remove(roomId);
+            roomStartTimes.remove(roomId);
+        }
+    }
+
+    /**
+     * 保存游戏记录到数据库
+     */
+    private void saveGameLog(long roomId, Map<String, GameEndVote> votes, String finalReason) {
+        try {
+            Long startTime = roomStartTimes.get(roomId);
+            long endTime = System.currentTimeMillis();
+            
+            // 构建result_json
+            Map<String, Object> result = new HashMap<>();
+            result.put("architecture", "B-Gossip");
+            result.put("finalReason", finalReason);
+            
+            // event: {username: 事件类型}
+            Map<String, String> events = new HashMap<>();
+            for (GameEndVote vote : votes.values()) {
+                events.put(vote.username, vote.reason);
+            }
+            result.put("events", events);
+            
+            String resultJson = objectMapper.writeValueAsString(result);
+            
+            // TODO: 调用GameLogRepository保存数据库
+            logger.info("[ArchB-Gossip] Room {} game log saved: {}", roomId, resultJson);
+            logger.info("[ArchB-Gossip] Room {} duration: {}ms", 
+                    roomId, startTime != null ? (endTime - startTime) : -1);
+            
+        } catch (Exception e) {
+            logger.error("[ArchB-Gossip] Failed to save game log for room {}", roomId, e);
+        }
+    }
+
     // --- 工具方法 ---
 
+    /**
+     * 清理玩家连接（P2P Gossip模式：无Host概念）
+     */
     private void cleanupConnection(String sessionId) {
         PlayerConnection conn = connections.remove(sessionId);
         if (conn == null) return;
 
         long roomId = conn.roomId;
+        String username = conn.username;
 
         Set<String> set = roomSessions.get(roomId);
         if (set != null) {
             set.remove(sessionId);
             if (set.isEmpty()) {
                 roomSessions.remove(roomId);
-                roomHosts.remove(roomId);
-                logger.info("[ArchB] Room {} all players left, cleared.", roomId);
-            }
-        }
-
-        // 如果当前断开的是 host，需要重新选 host
-        String hostSessionId = roomHosts.get(roomId);
-        if (hostSessionId != null && hostSessionId.equals(sessionId)) {
-            String newHost = null;
-            if (set != null && !set.isEmpty()) {
-                newHost = set.iterator().next();
-                roomHosts.put(roomId, newHost);
+                logger.info("[ArchB-Gossip] Room {} all players left, cleared.", roomId);
             } else {
-                roomHosts.remove(roomId);
-            }
-
-            logger.info("[ArchB] Room {} host {} left. New host sessionId={}",
-                    roomId, conn.username, newHost);
-
-            // 通知房间剩余玩家 host 变更
-            if (newHost != null) {
-                String hostName = connections.get(newHost).username;
-                broadcastToRoom(roomId, Map.of(
-                        "type", "HOST_CHANGED_B",
-                        "roomId", roomId,
-                        "hostUsername", hostName
-                ));
+                // 通知其他玩家：有人离开了
+                Map<String, Object> leaveEvent = new HashMap<>();
+                leaveEvent.put("type", "PLAYER_LEFT");
+                leaveEvent.put("username", username);
+                leaveEvent.put("players", getRoomPlayerUsernames(roomId));
+                broadcastToRoom(roomId, leaveEvent);
+                
+                logger.info("[ArchB-Gossip] Player {} left room {}, {} players remaining",
+                        username, roomId, set.size());
             }
         }
     }
@@ -276,12 +429,15 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
         session.sendMessage(new TextMessage(json));
     }
 
+    /**
+     * 广播消息给房间所有玩家
+     */
     private void broadcastToRoom(long roomId, Map<String, Object> data) {
         String json;
         try {
             json = objectMapper.writeValueAsString(data);
         } catch (Exception e) {
-            logger.error("[ArchB] Failed to serialize broadcast json", e);
+            logger.error("[ArchB-Gossip] Failed to serialize broadcast json", e);
             return;
         }
 
@@ -294,12 +450,44 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
                 try {
                     session.sendMessage(new TextMessage(json));
                 } catch (IOException e) {
-                    logger.error("[ArchB] Failed to send msg to session {}", sid, e);
+                    logger.error("[ArchB-Gossip] Failed to send msg to session {}", sid, e);
                 }
             }
         }
     }
 
+    /**
+     * 广播消息给房间所有玩家（排除指定session）
+     */
+    private void broadcastToRoomExcept(long roomId, Map<String, Object> data, String exceptSessionId) {
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            logger.error("[ArchB-Gossip] Failed to serialize broadcast json", e);
+            return;
+        }
+
+        Set<String> set = roomSessions.get(roomId);
+        if (set == null) return;
+
+        for (String sid : set) {
+            if (sid.equals(exceptSessionId)) continue; // 跳过发送者
+
+            WebSocketSession session = sessions.get(sid);
+            if (session != null && session.isOpen()) {
+                try {
+                    session.sendMessage(new TextMessage(json));
+                } catch (IOException e) {
+                    logger.error("[ArchB-Gossip] Failed to send msg to session {}", sid, e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 获取房间所有玩家用户名列表
+     */
     private List<String> getRoomPlayerUsernames(long roomId) {
         Set<String> set = roomSessions.get(roomId);
         if (set == null) return Collections.emptyList();
@@ -314,13 +502,6 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
         return users;
     }
 
-    private String getHostUsername(long roomId) {
-        String hostSessionId = roomHosts.get(roomId);
-        if (hostSessionId == null) return null;
-        PlayerConnection conn = connections.get(hostSessionId);
-        return conn == null ? null : conn.username;
-    }
-
     /** 房间内 WebSocket 连接信息 */
     private static class PlayerConnection {
         final long roomId;
@@ -329,5 +510,22 @@ public class GameWebSocketHandlerB extends TextWebSocketHandler {
             this.roomId = roomId;
             this.username = username;
         }
+    }
+
+    /** 游戏结束投票信息 */
+    private static class GameEndVote {
+        final String username;
+        final String reason;
+        final long timestamp;
+        
+        GameEndVote(String username, String reason, long timestamp) {
+            this.username = username;
+            this.reason = reason;
+            this.timestamp = timestamp;
+        }
+
+        public String getUsername() { return username; }
+        public String getReason() { return reason; }
+        public long getTimestamp() { return timestamp; }
     }
 }

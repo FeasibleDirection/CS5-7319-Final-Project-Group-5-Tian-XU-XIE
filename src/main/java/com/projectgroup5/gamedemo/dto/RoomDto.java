@@ -12,6 +12,7 @@ public class RoomDto {
     private String ownerName;
 
     private boolean started;                // 游戏是否已经开始
+    private String architecture;            // 架构模式：A 或 B
     private List<PlayerInfoDto> players;           // 按顺序：第一个是房主
     private List<String> readyUsernames;    // 已准备的玩家
 
@@ -93,5 +94,13 @@ public class RoomDto {
 
     public void setReadyUsernames(List<String> readyUsernames) {
         this.readyUsernames = readyUsernames;
+    }
+
+    public String getArchitecture() {
+        return architecture;
+    }
+
+    public void setArchitecture(String architecture) {
+        this.architecture = architecture;
     }
 }

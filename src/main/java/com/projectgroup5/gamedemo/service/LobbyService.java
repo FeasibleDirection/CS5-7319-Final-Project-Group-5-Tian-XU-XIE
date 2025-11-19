@@ -4,13 +4,17 @@ import com.projectgroup5.gamedemo.dto.CreateRoomRequest;
 import com.projectgroup5.gamedemo.dto.LobbySlotDto;
 import com.projectgroup5.gamedemo.dto.PlayerInfoDto;
 import com.projectgroup5.gamedemo.dto.RoomDto;
+import com.projectgroup5.gamedemo.game.GameRoomManager;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class LobbyService {
+    private static final Logger logger = LoggerFactory.getLogger(LobbyService.class);
 
     private static final int TABLE_COUNT = 20;
 
@@ -50,21 +54,6 @@ public class LobbyService {
     private final GameServiceArchA gameServiceArchA;
     private final GameServiceArchB gameServiceArchB;
 
-    /**
-     * 一局游戏彻底结束后（GameService 通知），重置房间：
-     * - 清空 ready 列表（所有人变回“未准备”）
-     * - started = false
-     * - 保留玩家列表和 mode，方便下一局继续在同一架构模式下玩
-     */
-    public void resetRoomAfterGame(long roomId) {
-        Room room = roomsById.get(roomId);
-        if (room == null) {
-            return;
-        }
-        room.started = false;
-        room.readyPlayers.clear();
-        // players 列表保留：大家还在这个桌子，只是都需要重新准备
-    }
 
     // 获取大厅快照
     public synchronized List<LobbySlotDto> getLobbySnapshot() {
@@ -217,6 +206,11 @@ public class LobbyService {
 
     // 房主点击开始
     public synchronized RoomDto startGame(long roomId, String ownerName) {
+        return startGame(roomId, ownerName, null);
+    }
+
+    // 🔥 新增：支持指定架构模式
+    public synchronized RoomDto startGame(long roomId, String ownerName, GameMode mode) {
         Room r = roomsById.get(roomId);
         if (r == null) return null;
         if (!ownerName.equals(r.ownerName)) return null;
@@ -231,12 +225,34 @@ public class LobbyService {
         }
 
         r.started = true;
+        // 🔥 设置架构模式（如果提供）
+        if (mode != null) {
+            r.mode = mode;
+        }
         return toDto(r);
     }
 
     // 查询某个玩家当前房间（用于前端判断是否在房间里）
     public synchronized Long getRoomIdByUser(String username) {
         return userToRoom.get(username);
+    }
+
+    /**
+     * 一局游戏彻底结束后（GameService 通知），重置房间：
+     * - 清空 ready 列表（所有人变回“未准备”）
+     * - started = false
+     * - 保留玩家列表和 mode，方便下一局继续在同一架构模式下玩
+     */
+    // 🔥 重置房间状态（游戏结束后）
+    public synchronized void resetRoomAfterGame(long roomId) {
+        Room r = roomsById.get(roomId);
+        if (r == null) return;
+        
+        r.started = false;
+        // 清空准备状态，让玩家重新准备
+        r.readyPlayers.clear();
+        
+        logger.info("Room {} reset after game: started=false, ready cleared", roomId);
     }
 
     private RoomDto toDto(Room r) {
@@ -249,6 +265,8 @@ public class LobbyService {
         dto.setWinMode(r.winMode);
         dto.setOwnerName(r.ownerName);
         dto.setStarted(r.started);
+        // 🔥 设置架构模式
+        dto.setArchitecture(r.mode == GameMode.ARCH_B ? "B" : "A");
         List<PlayerInfoDto> playerDtos = new ArrayList<>();
         for (String username : r.players) {
             PlayerInfoDto p = new PlayerInfoDto();
