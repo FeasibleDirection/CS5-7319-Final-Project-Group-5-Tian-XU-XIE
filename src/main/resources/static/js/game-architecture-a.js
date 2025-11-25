@@ -76,12 +76,12 @@ function getPlayerColor(u) {
     console.log('[INIT]', 'username:', username, 'token exists:', !!token);
 
     if (!roomId || !username || !token) {
-        alert('参数错误，返回大厅');
+        alert('Invalid parameters, returning to lobby');
         window.location.href = '/lobby.html';
         return;
     }
     if (arch !== 'A') {
-        alert('当前只支持 Architecture A');
+        alert('Only Architecture A is supported');
         window.location.href = '/lobby.html';
         return;
     }
@@ -141,7 +141,7 @@ function connectWebSocket() {
 
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        alert('连接失败');
+        alert('Connection failed');
     };
 
     ws.onclose = () => {
@@ -206,16 +206,16 @@ function handleServerMessage(msg) {
 
         case 'ERROR':
             console.error('Server error:', msg.message);
-            alert('错误: ' + msg.message);
-            // 如果是在 JOIN 阶段就失败，也回 lobby 并禁止再自动跳
+            alert('Error: ' + msg.message);
+            // If failed during JOIN phase, return to lobby and disable auto-jump
             if (msg.message && msg.message.includes('Not in room')) {
                 window.location.href = '/lobby.html?fromGameError=1';
             }
             break;
         case 'NOT_IN_ROOM':
             console.error('[NOT_IN_ROOM]', msg.message);
-            alert(msg.message + '\n\n请先在大厅点击 "Start (Arch A)" 按钮');
-            // 加一个 fromGameError=1，告诉 lobby：这次是失败返回
+            alert(msg.message + '\n\nPlease click "Start (Arch A)" button in the lobby first');
+            // Add fromGameError=1 to tell lobby: this is an error return
             window.location.href = '/lobby.html?fromGameError=1';
             break;
 

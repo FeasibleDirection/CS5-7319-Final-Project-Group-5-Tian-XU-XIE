@@ -83,7 +83,7 @@ function renderLeaderboard() {
     }
     
     if (!leaderboardData || leaderboardData.length === 0) {
-        leaderboardContent.innerHTML = '<div class="lb-loading">暂无游戏数据</div>';
+        leaderboardContent.innerHTML = '<div class="lb-loading">No game data</div>';
         return;
     }
     
@@ -154,12 +154,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (urlParams.has('fromGameError')) {
         // 错误返回：禁用自动跳转
         allowAutoEnterGame = false;
-        console.log('[LOBBY] 禁用自动进入游戏（游戏错误返回）');
+        console.log('[LOBBY] Disabled auto-enter game (error from game)');
         window.history.replaceState({}, document.title, '/lobby.html');
     } else if (urlParams.has('fromGameExit')) {
         // 正常退出：重置为允许自动跳转
         allowAutoEnterGame = true;
-        console.log('[LOBBY] 重置allowAutoEnterGame=true（游戏正常结束）');
+        console.log('[LOBBY] Reset allowAutoEnterGame=true (game ended normally)');
         window.history.replaceState({}, document.title, '/lobby.html');
     }
 
@@ -272,11 +272,11 @@ function renderEmptyTables() {
 
         card.innerHTML = `
           <div class="table-header">
-              <div class="table-title">桌子 #${i}</div>
-              <div class="table-status" id="table-status-${i}">空桌</div>
+              <div class="table-title">Room #${i}</div>
+              <div class="table-status" id="table-status-${i}">Empty Room</div>
           </div>
           <div class="table-body" id="table-body-${i}">
-              <div class="table-empty">暂无房间</div>
+              <div class="table-empty">No rooms available</div>
           </div>
         `;
         container.appendChild(card);
@@ -307,8 +307,8 @@ function applyLobbySlots(slots) {
         const statusEl = document.getElementById(`table-status-${i}`);
         const bodyEl = document.getElementById(`table-body-${i}`);
         if (!statusEl || !bodyEl) continue;
-        statusEl.textContent = '空桌';
-        bodyEl.innerHTML = `<div class="table-empty">暂无房间</div>`;
+        statusEl.textContent = 'Empty';
+        bodyEl.innerHTML = `<div class="table-empty">Empty room</div>`;
     }
 
     if (!Array.isArray(slots)) return;
@@ -344,8 +344,8 @@ function applyLobbySlots(slots) {
             // 🔥 检测游戏局数ID变化：只要gameSessionId递增，就说明新游戏开始
             const currentSessionId = room.gameSessionId || 0;
             if (currentSessionId > lastGameSessionId) {
-                console.log('[LOBBY] 检测到新游戏开始（session', lastGameSessionId, '→', currentSessionId, '），重置allowAutoEnterGame=true');
-                allowAutoEnterGame = true;  // 🔥 重置为初始状态
+                console.log('[LOBBY] Detected new game (session', lastGameSessionId, '→', currentSessionId, '), reset allowAutoEnterGame=true');
+                allowAutoEnterGame = true;  // 🔥 Reset to initial state
             }
             lastGameSessionId = currentSessionId;
             
@@ -358,20 +358,20 @@ function applyLobbySlots(slots) {
             }
         }
 
-        // 房间标题
-        statusEl.textContent = `房间 #${room.roomId}${room.started ? '（已开始）' : ''}`;
+        // Room title
+        statusEl.textContent = `Room #${room.roomId}${room.started ? ' (Started)' : ''}`;
 
-        // 队员列表文本
+        // Members list text
         let membersText = '';
         if (players.length > 0) {
-            // 非房主为队员
+            // Non-owner players are members
             const others = players.filter(p => !p.owner);
             if (others.length > 0) {
                 membersText = others.map(p =>
-                    `${p.username}（${p.ready ? '已准备' : '未准备'}）`
-                ).join('，');
+                    `${p.username} (${p.ready ? 'Ready' : 'Not Ready'})`
+                ).join(', ');
             } else {
-                membersText = '（暂无队员）';
+                membersText = '(No members)';
             }
         }
 
@@ -385,15 +385,15 @@ function applyLobbySlots(slots) {
             }
         })();
 
-        // 填充桌子信息 + 按钮区域
+        // Fill table info + button area
         bodyEl.innerHTML = '';
         const info = document.createElement('div');
         info.innerHTML = `
-            <div>房主：${room.ownerName}</div>
-            <div>队员：${membersText}</div>
-            <div>人数：${room.currentPlayers} / ${room.maxPlayers}</div>
-            <div>地图：${room.mapName}</div>
-            <div>胜利条件：${winText}</div>
+            <div>Host: ${room.ownerName}</div>
+            <div>Members: ${membersText}</div>
+            <div>Players: ${room.currentPlayers} / ${room.maxPlayers}</div>
+            <div>Map: ${room.mapName}</div>
+            <div>Win Condition: ${winText}</div>
         `;
         bodyEl.appendChild(info);
 
@@ -404,7 +404,7 @@ function applyLobbySlots(slots) {
             // 当前用户在这个房间中
             if (!room.started) {
                 if (isOwner) {
-                    // 房主：两个架构的开始按钮 + 退出
+                    // 房主：三个开始按钮 + 退出
                     const btnStartA = document.createElement('button');
                     btnStartA.textContent = 'Start (Arch A)';
                     btnStartA.className = 'btn-primary';
@@ -414,26 +414,33 @@ function applyLobbySlots(slots) {
                     const btnStartB = document.createElement('button');
                     btnStartB.textContent = 'Start (Arch B)';
                     btnStartB.className = 'btn-secondary';
-                    btnStartB.title = 'Architecture B: P2P Lockstep (Not implemented)';
+                    btnStartB.title = 'Architecture B: P2P Gossip';
                     btnStartB.onclick = () => startGameArchitectureB(room.roomId, room.winMode);
 
+                    const btnLocal = document.createElement('button');
+                    btnLocal.textContent = 'local game';
+                    btnLocal.className = 'btn-local';
+                    btnLocal.title = 'Local Game: Offline Single Player';
+                    btnLocal.onclick = () => startLocalGame(room.winMode);
+
                     const btnLeave = document.createElement('button');
-                    btnLeave.textContent = '退出';
+                    btnLeave.textContent = 'quit';
                     btnLeave.className = 'btn-danger';
                     btnLeave.onclick = () => leaveRoom(room.roomId);
 
                     btnBox.appendChild(btnStartA);
                     btnBox.appendChild(btnStartB);
+                    btnBox.appendChild(btnLocal);
                     btnBox.appendChild(btnLeave);
                 } else {
-                    // 队员：准备/取消准备 + 退出
+                    // Members: Ready/Unready + Leave
                     const btnReady = document.createElement('button');
-                    btnReady.textContent = isReady ? '取消准备' : '准备';
+                    btnReady.textContent = isReady ? 'Unready' : 'Ready';
                     btnReady.className = isReady ? 'btn-secondary' : 'btn-primary';
                     btnReady.onclick = () => toggleReady(room.roomId);
 
                     const btnLeave = document.createElement('button');
-                    btnLeave.textContent = '退出';
+                    btnLeave.textContent = 'Leave';
                     btnLeave.className = 'btn-danger';
                     btnLeave.onclick = () => leaveRoom(room.roomId);
 
@@ -441,11 +448,11 @@ function applyLobbySlots(slots) {
                     btnBox.appendChild(btnLeave);
                 }
             } else {
-                // 游戏已开始：进入游戏 + 退出
+                // Game started: Enter Game + Leave
                 const btnEnter = document.createElement('button');
-                btnEnter.textContent = '进入游戏';
+                btnEnter.textContent = 'Enter Game';
                 btnEnter.className = 'btn-primary';
-                // 🔥 手动点击"进入游戏"按钮时，重新允许自动跳转，并使用正确的架构模式
+                // 🔥 When manually clicking "Enter Game", re-enable auto-jump and use correct architecture
                 btnEnter.onclick = () => {
                     allowAutoEnterGame = true;
                     const arch = room.architecture || 'A';
@@ -453,7 +460,7 @@ function applyLobbySlots(slots) {
                 };
 
                 const btnLeave = document.createElement('button');
-                btnLeave.textContent = '退出';
+                btnLeave.textContent = 'Leave';
                 btnLeave.className = 'btn-danger';
                 btnLeave.onclick = () => leaveRoom(room.roomId);
 
@@ -461,9 +468,9 @@ function applyLobbySlots(slots) {
                 btnBox.appendChild(btnLeave);
             }
         } else {
-            // 当前用户不在这个房间
+            // Current user not in this room
             const btnJoin = document.createElement('button');
-            btnJoin.textContent = '加入';
+            btnJoin.textContent = 'Join';
             btnJoin.className = 'btn-primary';
             btnJoin.disabled =
                 room.started ||
@@ -477,14 +484,14 @@ function applyLobbySlots(slots) {
         bodyEl.appendChild(btnBox);
     }
 
-    // 🔥 只在允许自动跳转时才执行（防止从游戏错误返回后无限循环）
+    // 🔥 Only auto-enter when allowed (prevent infinite loop after error return)
     if (shouldEnterGame && enterRoomId !== null && allowAutoEnterGame) {
-        console.log('[LOBBY] 自动进入游戏 roomId:', enterRoomId, 'arch:', enterArchitecture, 'winMode:', enterWinMode);
+        console.log('[LOBBY] Auto-enter game roomId:', enterRoomId, 'arch:', enterArchitecture, 'winMode:', enterWinMode);
         enterGame(enterRoomId, enterWinMode, enterArchitecture);
     }
 }
 
-// --------- 创建房间 ---------
+// --------- Create Room ---------
 
 async function onCreateRoom() {
     const createMsg = document.getElementById('createMessage');
@@ -507,17 +514,17 @@ async function onCreateRoom() {
         if (!resp.ok) {
             const text = await resp.text();
             createMsg.style.color = '#ff6b6b';
-            createMsg.textContent = text || '创建房间失败';
+            createMsg.textContent = text || 'Failed to create room';
             return;
         }
 
         createMsg.style.color = '#8df59d';
-        createMsg.textContent = '创建成功！';
+        createMsg.textContent = 'Created successfully!';
         await fetchLobby();
     } catch (e) {
         console.error('create room error', e);
         createMsg.style.color = '#ff6b6b';
-        createMsg.textContent = '网络错误，创建失败';
+        createMsg.textContent = 'Network error, failed to create';
     }
 }
 
@@ -576,19 +583,19 @@ async function startGameArchitectureA(roomId, winMode) {
         });
         if (!resp.ok) {
             console.error('start game (Arch A) failed', await resp.text());
-            alert('无法开始游戏（Architecture A）');
-            // 🔥 开始失败，禁用自动跳转
+            alert('Cannot start game (Architecture A)');
+            // 🔥 Start failed, disable auto-jump
             allowAutoEnterGame = false;
         } else {
-            // 🔥 开始成功，允许自动跳转
+            // 🔥 Start succeeded, allow auto-jump
             allowAutoEnterGame = true;
-            console.log('[LOBBY] 开始游戏成功，跳转到 game.html');
-            // 房主立即跳转到Architecture A游戏
+            console.log('[LOBBY] Game started successfully, jumping to game.html');
+            // Host immediately jumps to Architecture A game
             enterGame(roomId, winMode, 'A');
         }
     } catch (e) {
         console.error('startGameArchitectureA error', e);
-        alert('网络错误，无法开始游戏');
+        alert('Network error, cannot start game');
         allowAutoEnterGame = false;
     }
 }
@@ -601,18 +608,18 @@ async function startGameArchitectureB(roomId, winMode) {
         });
         if (!resp.ok) {
             const text = await resp.text();
-            alert('Architecture B 未实现：' + text);
-            // 🔥 开始失败，禁用自动跳转
+            alert('Architecture B not implemented: ' + text);
+            // 🔥 Start failed, disable auto-jump
             allowAutoEnterGame = false;
         } else {
-            // 🔥 开始成功，允许自动跳转
+            // 🔥 Start succeeded, allow auto-jump
             allowAutoEnterGame = true;
-            console.log('[LOBBY] 开始游戏成功（Arch B），跳转到 game.html');
+            console.log('[LOBBY] Game started successfully (Arch B), jumping to game.html');
             enterGame(roomId, winMode, 'B');
         }
     } catch (e) {
         console.error('startGameArchitectureB error', e);
-        alert('网络错误，无法开始游戏');
+        alert('Network error, cannot start game');
         allowAutoEnterGame = false;
     }
 }
@@ -620,6 +627,12 @@ async function startGameArchitectureB(roomId, winMode) {
 function enterGame(roomId, winMode, architecture = 'A') {
     // 跳转到游戏页面，传递架构类型
     window.location.href = `/game.html?roomId=${roomId}&win=${winMode}&arch=${architecture}`;
+}
+
+// 本地游戏（单人离线模式）
+function startLocalGame(winMode) {
+    console.log('[LOBBY] Starting local game, winMode:', winMode);
+    window.location.href = `/game-local.html?win=${winMode}`;
 }
 
 // --------- 选项 chips 工具函数 ---------
@@ -667,37 +680,37 @@ function renderRoomActions(room, currentUsername, container) {
 
     if (isOwner) {
         const btnStartA = document.createElement('button');
-        btnStartA.textContent = '开始(A)';
+        btnStartA.textContent = 'Start(A)';
         btnStartA.className = 'btn btn-primary';
         btnStartA.onclick = () => startGame(room.roomId, 'ARCH_A');
 
         const btnStartB = document.createElement('button');
-        btnStartB.textContent = '开始(B)';
+        btnStartB.textContent = 'Start(B)';
         btnStartB.className = 'btn btn-secondary';
         btnStartB.onclick = () => startGame(room.roomId, 'ARCH_B');
 
         const btnLeave = document.createElement('button');
-        btnLeave.textContent = '退出';
+        btnLeave.textContent = 'Leave';
         btnLeave.onclick = () => leaveRoom(room.roomId);
 
         actionsDiv.appendChild(btnStartA);
         actionsDiv.appendChild(btnStartB);
         actionsDiv.appendChild(btnLeave);
     } else if (isInRoom) {
-        // 队员：准备 / 退出
+        // Members: Ready / Leave
         const btnReady = document.createElement('button');
-        btnReady.textContent = room.isReady ? '取消准备' : '准备';
+        btnReady.textContent = room.isReady ? 'Unready' : 'Ready';
         btnReady.onclick = () => toggleReady(room.roomId);
 
         const btnLeave = document.createElement('button');
-        btnLeave.textContent = '退出';
+        btnLeave.textContent = 'Leave';
         btnLeave.onclick = () => leaveRoom(room.roomId);
 
         actionsDiv.appendChild(btnReady);
         actionsDiv.appendChild(btnLeave);
     } else {
         const btnJoin = document.createElement('button');
-        btnJoin.textContent = '加入';
+        btnJoin.textContent = 'Join';
         btnJoin.onclick = () => joinRoom(room.roomId);
         actionsDiv.appendChild(btnJoin);
     }
@@ -711,7 +724,7 @@ async function startGame(roomId, mode) {
     });
     if (!resp.ok) {
         const txt = await resp.text();
-        alert(txt || '开始失败');
+        alert(txt || 'Failed to start');
     } else {
         // 开始成功后，由 lobby 的 500ms 轮询检测到 room.started=true 后自动跳转 game.html
         await fetchLobbyOnce();

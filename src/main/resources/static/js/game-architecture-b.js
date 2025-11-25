@@ -98,13 +98,13 @@ const STATE_BROADCAST_INTERVAL = 100; // 10Hz (石头/子弹位置)
     console.log('[ArchB-Gossip] username:', username, 'token exists:', !!token);
 
     if (!roomId || !username || !token) {
-        alert('参数错误，返回大厅');
+        alert('Invalid parameters, returning to lobby');
         window.location.href = '/lobby.html';
         return;
     }
 
     if (arch !== 'B') {
-        alert('当前脚本仅适用于 Architecture B');
+        alert('This script is only for Architecture B');
         window.location.href = '/lobby.html';
         return;
     }
@@ -159,7 +159,7 @@ function connectWebSocket() {
 
     ws.onerror = (error) => {
         console.error('[ArchB-Gossip] WebSocket error', error);
-        alert('连接失败');
+        alert('Connection failed');
     };
 
     ws.onclose = () => {
@@ -255,7 +255,7 @@ function handleServerMessage(msg) {
 
         case 'NOT_IN_ROOM':
             console.error('[ArchB-Gossip] NOT_IN_ROOM:', msg.message);
-            alert(msg.message + '\n\n请先在大厅点击 "Start (Arch B)" 按钮');
+            alert(msg.message + '\n\nPlease click "Start (Arch B)" button in the lobby first');
             window.location.href = '/lobby.html?fromGameError=1';
             break;
 
@@ -366,10 +366,10 @@ function handleGameEnded(msg) {
     console.log('[ArchB-Gossip] Game ended:', msg);
     gameState.phase = 'FINISHED';
     
-    // 跳转到结算页面
+    // Jump to end screen
     setTimeout(() => {
-        alert('游戏结束！\n原因：' + (msg.reason || 'unknown'));
-        // 🔥 添加fromGameExit=1参数，防止自动重新进入游戏
+        alert('Game Over!\nReason: ' + (msg.reason || 'unknown'));
+        // 🔥 Add fromGameExit=1 parameter to prevent auto-rejoin
         window.location.href = '/lobby.html?fromGameExit=1';
     }, 1000);
 }

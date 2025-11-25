@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>打飞机 - 大厅</title>
+    <title>Ground Attack - Lobby</title>
     <link rel="stylesheet" href="/css/lobby.css">
 </head>
 <body>
@@ -12,26 +12,26 @@
             <span class="title">Matching Lobby</span>
         </div>
         <div class="top-right">
-            <button id="btnLeaderboard" class="btn">排行榜</button>
-            <button id="btnRefresh" class="btn">刷新</button>
-            <button id="btnCreateRoom" class="btn btn-primary">创建房间</button>
+            <button id="btnLeaderboard" class="btn">Leaderboard</button>
+            <button id="btnRefresh" class="btn">Refresh</button>
+            <button id="btnCreateRoom" class="btn btn-primary">Create Room</button>
         </div>
     </header>
 
     <main class="main-area">
         <section class="tables-area">
             <div id="tablesContainer" class="tables-container">
-                <!-- JS 渲染 20 个桌子 -->
+                <!-- JS renders 20 tables -->
             </div>
         </section>
 
         <aside class="create-area">
-            <!-- 创建房间面板 -->
+            <!-- Create room panel -->
             <div id="createPanel" class="create-panel hidden">
-                <div class="cp-header">创建房间</div>
+                <div class="cp-header">Create Room</div>
 
                 <div class="cp-section">
-                    <div class="cp-label">玩家人数</div>
+                    <div class="cp-label">Max Players</div>
                     <div class="cp-options" id="optPlayers">
                         <button data-value="1" class="chip selected">1</button>
                         <button data-value="2" class="chip">2</button>
@@ -41,7 +41,7 @@
                 </div>
 
                 <div class="cp-section">
-                    <div class="cp-label">地图</div>
+                    <div class="cp-label">Map</div>
                     <div class="cp-options" id="optMap">
                         <button data-value="Nebula-01" class="chip selected">Nebula-01</button>
                         <button data-value="Asteroid Field" class="chip">Asteroid Field</button>
@@ -50,7 +50,7 @@
                 </div>
 
                 <div class="cp-section">
-                    <div class="cp-label">胜利条件</div>
+                    <div class="cp-label">Win Condition</div>
                     <div class="cp-options" id="optWin">
                         <button data-value="SCORE_50" class="chip selected">Score 50</button>
                         <button data-value="SCORE_100" class="chip">Score 100</button>
@@ -60,21 +60,21 @@
                 </div>
 
                 <div class="cp-actions">
-                    <button id="btnCancelCreate" class="btn">取消</button>
-                    <button id="btnConfirmCreate" class="btn btn-primary">创建</button>
+                    <button id="btnCancelCreate" class="btn">Cancel</button>
+                    <button id="btnConfirmCreate" class="btn btn-primary">Create</button>
                 </div>
 
                 <div id="createMessage" class="cp-message"></div>
             </div>
 
-            <!-- 🏆 排行榜面板 -->
+            <!-- 🏆 Leaderboard panel -->
             <div id="leaderboardPanel" class="leaderboard-panel hidden">
-                <div class="lb-header">🏆 排行榜</div>
+                <div class="lb-header">🏆 Leaderboard</div>
                 <div id="leaderboardContent" class="lb-content">
-                    <div class="lb-loading">加载中...</div>
+                    <div class="lb-loading">Loading...</div>
                 </div>
                 <div class="lb-actions">
-                    <button id="btnCancelLeaderboard" class="btn">取消</button>
+                    <button id="btnCancelLeaderboard" class="btn">Close</button>
                 </div>
             </div>
         </aside>

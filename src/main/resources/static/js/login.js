@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
         msgBox.className = 'message';
 
         if (!username || !password) {
-            msgBox.textContent = '请输入账号和密码';
+            msgBox.textContent = 'Please enter account and password';
             msgBox.classList.add('error');
             return;
         }
@@ -36,25 +36,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!resp.ok) {
                 const text = await resp.text();
-                msgBox.textContent = text || '登录失败';
+                msgBox.textContent = text || 'Login failed';
                 msgBox.classList.add('error');
                 return;
             }
 
             const data = await resp.json();
-            // 保存 token + 用户信息 + 账号密码（demo 用）
+            // Save token + user info + password (for demo)
             saveLoginSession(data.token, data.user, true, password);
 
-            msgBox.textContent = '登录成功！正在进入大厅…';
+            msgBox.textContent = 'Login successful! Entering lobby...';
             msgBox.classList.add('success');
 
-            //登录成功后跳转到大厅页面
-            // 稍微延迟 500ms，让用户看到“登录成功”提示
+            // Redirect to lobby after login success
+            // Delay 500ms to let user see "Login successful" message
             setTimeout(() => {
                 window.location.href = '/lobby.html';
             }, 500);
         } catch (e) {
-            msgBox.textContent = '无法连接服务器';
+            msgBox.textContent = 'Cannot connect to server';
             msgBox.classList.add('error');
         }
     });
