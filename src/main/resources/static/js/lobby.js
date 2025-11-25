@@ -418,13 +418,13 @@ function applyLobbySlots(slots) {
                     btnStartB.onclick = () => startGameArchitectureB(room.roomId, room.winMode);
 
                     const btnLocal = document.createElement('button');
-                    btnLocal.textContent = 'local game';
+                    btnLocal.textContent = '本地游戏';
                     btnLocal.className = 'btn-local';
                     btnLocal.title = 'Local Game: Offline Single Player';
                     btnLocal.onclick = () => startLocalGame(room.winMode);
 
                     const btnLeave = document.createElement('button');
-                    btnLeave.textContent = 'quit';
+                    btnLeave.textContent = '退出';
                     btnLeave.className = 'btn-danger';
                     btnLeave.onclick = () => leaveRoom(room.roomId);
 

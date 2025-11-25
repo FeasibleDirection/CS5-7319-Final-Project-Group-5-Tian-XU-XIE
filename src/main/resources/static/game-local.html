@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Ground Attack - local game</title>
+    <link rel="stylesheet" href="/css/game.css">
+</head>
+<body>
+<div class="game-container">
+    <header class="game-header">
+        <div class="game-info-left">
+            <div class="info-item">
+                <span class="label">model:</span>
+                <span id="lblArchitecture">[Local single-player game]</span>
+            </div>
+            <div class="info-item">
+                <span class="label">player:</span>
+                <span id="lblUser">LocalPlayer</span>
+            </div>
+        </div>
+
+        <div class="game-info-center">
+            <div class="info-item">
+                <span class="label">❤HP:</span>
+                <span id="hpText" class="stat-value">3</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Score:</span>
+                <span id="scoreText" class="stat-value">0</span>
+            </div>
+            <div class="info-item">
+                <span class="label">⏱️Time</span>
+                <span id="timeText" class="stat-value">0:00</span>
+            </div>
+        </div>
+
+        <div class="game-info-right">
+            <button id="btnLeave" class="btn-header">Return to the lobby</button>
+        </div>
+    </header>
+
+    <main class="game-main">
+        <div class="canvas-wrapper">
+            <canvas id="gameCanvas" width="480" height="640"></canvas>
+        </div>
+
+        <aside class="game-sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">🎮 operating instructions</div>
+                <div class="sidebar-content">
+                    <p>W/S/A/D - Move</p>
+                    <p>J / Space - Shooting</p>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Scoreboard</div>
+                <ul id="scoreList" class="score-list">
+                    <li>wait to load...</li>
+                </ul>
+            </div>
+        </aside>
+    </main>
+</div>
+
+<!-- 游戏结束遮罩 -->
+<div id="overlay" class="overlay hidden">
+    <div class="overlay-content">
+        <h2 id="overTitle">game over
+        </h2>
+        <p id="overSummary">--</p>
+        <button id="btnBackLobby" class="btn-overlay">Return to the lobby</button>
+    </div>
+</div>
+
+<script src="/js/game-local.js"></script>
+</body>
+</html>
+
