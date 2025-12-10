@@ -133,7 +133,14 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                     break;
 
                 default:
-                    logger.warn("Unknown message type: {}", type);
+                    // 🔥 如果是架构B的消息类型，提示应该使用GameWebSocketHandlerB
+                    if (type != null && (type.contains("POSITION") || type.contains("SPAWN") || 
+                        type.equals("GAME_END_VOTE") || type.equals("JOIN_GAME_B"))) {
+                        logger.warn("Unknown message type: {} - This looks like Architecture B message. " +
+                                "Please connect to /ws/game-b endpoint instead of /ws/game", type);
+                    } else {
+                        logger.warn("Unknown message type: {}", type);
+                    }
             }
 
         } catch (Exception e) {

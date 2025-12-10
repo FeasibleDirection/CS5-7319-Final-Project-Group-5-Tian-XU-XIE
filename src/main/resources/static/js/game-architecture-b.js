@@ -138,7 +138,9 @@ const STATE_BROADCAST_INTERVAL = 100; // 10Hz (石头/子弹位置)
 // ============ WebSocket ============
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/game`;
+    // 🔥 确保使用架构B的WebSocket端点
+    const wsUrl = `${protocol}//${window.location.host}/ws/game-b`;
+    console.log('[ArchB-Gossip] Connecting to WebSocket:', wsUrl);
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -364,11 +366,29 @@ function handleBulletDestroyed(msg) {
 
 function handleGameEnded(msg) {
     console.log('[ArchB-Gossip] Game ended:', msg);
+    
+    // 🔥 防止重复处理
+    if (gameState.phase === 'FINISHED') {
+        console.log('[ArchB-Gossip] Game already ended, ignoring duplicate GAME_ENDED message');
+        return;
+    }
+    
     gameState.phase = 'FINISHED';
+    hasVotedGameEnd = true;
+    
+    // 🔥 显示游戏结束信息
+    const reason = msg.reason || 'unknown';
+    const winner = msg.winner || 'none';
+    
+    console.log('[ArchB-Gossip] Game Over! Reason:', reason, 'Winner:', winner);
     
     // Jump to end screen
     setTimeout(() => {
-        alert('Game Over!\nReason: ' + (msg.reason || 'unknown'));
+        let message = 'Game Over!\nReason: ' + reason;
+        if (winner && winner !== 'none') {
+            message += '\nWinner: ' + winner;
+        }
+        alert(message);
         // 🔥 Add fromGameExit=1 parameter to prevent auto-rejoin
         window.location.href = '/lobby.html?fromGameExit=1';
     }, 1000);
@@ -723,6 +743,12 @@ function detectMyCollisions() {
                         type: 'PLAYER_DEAD',
                         username
                     });
+                    
+                    // 🔥 立即检查游戏结束条件（玩家死亡后）
+                    checkGameEndConditions();
+                    
+                    // 🔥 立即检查游戏结束条件（玩家死亡后）
+                    checkGameEndConditions();
                 }
             }
         });
@@ -750,10 +776,14 @@ function checkGameEndConditions() {
         }
     }
 
-    // 条件2：所有玩家HP=0
-    const allDead = Object.values(gameState.players).every(p => !p.alive || p.hp <= 0);
+    // 条件2：所有玩家HP=0或alive=false
+    const allDead = Object.values(gameState.players).every(p => {
+        // 检查玩家是否死亡：alive为false或hp<=0
+        return p && (!p.alive || p.hp <= 0);
+    });
     
     if (allDead && Object.keys(gameState.players).length > 0) {
+        console.log('[ArchB-Gossip] All players dead, voting game end');
         voteGameEnd('ALL_PLAYERS_DEAD');
         return;
     }

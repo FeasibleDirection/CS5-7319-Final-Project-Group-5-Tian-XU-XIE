@@ -401,10 +401,10 @@ function applyLobbySlots(slots) {
         btnBox.className = 'table-actions';
 
         if (isInRoom) {
-            // 当前用户在这个房间中
+            // The current user is in this room.
             if (!room.started) {
                 if (isOwner) {
-                    // 房主：三个开始按钮 + 退出
+                    // Owner: Three start buttons + Exit
                     const btnStartA = document.createElement('button');
                     btnStartA.textContent = 'Start (Arch A)';
                     btnStartA.className = 'btn-primary';
@@ -418,13 +418,13 @@ function applyLobbySlots(slots) {
                     btnStartB.onclick = () => startGameArchitectureB(room.roomId, room.winMode);
 
                     const btnLocal = document.createElement('button');
-                    btnLocal.textContent = '本地游戏';
+                    btnLocal.textContent = 'local game';
                     btnLocal.className = 'btn-local';
                     btnLocal.title = 'Local Game: Offline Single Player';
                     btnLocal.onclick = () => startLocalGame(room.winMode);
 
                     const btnLeave = document.createElement('button');
-                    btnLeave.textContent = '退出';
+                    btnLeave.textContent = 'quit';
                     btnLeave.className = 'btn-danger';
                     btnLeave.onclick = () => leaveRoom(room.roomId);
 
